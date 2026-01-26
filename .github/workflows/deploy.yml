@@ -1,0 +1,91 @@
+# name: CI/CD Deploy to ECS
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   build-and-deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v3
+
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: us-east-1
+
+#       - name: Login to Amazon ECR
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v1
+
+#       - name: Build Docker image
+#         run: |
+#           IMAGE_TAG=shopify-ai-backend:${{ github.sha }}
+#           docker build -t $IMAGE_TAG .
+#           docker tag $IMAGE_TAG 505789306397.dkr.ecr.us-east-1.amazonaws.com/shopify-ai-backend:$IMAGE_TAG
+
+#       - name: Push Docker image to ECR
+#         run: |
+#           IMAGE_TAG=shopify-ai-backend:${{ github.sha }}
+#           docker push 505789306397.dkr.ecr.us-east-1.amazonaws.com/shopify-ai-backend:$IMAGE_TAG
+
+#       - name: Update ECS service
+#         run: |
+#           aws ecs update-service \
+#             --cluster shopify-ai-cluster \
+#             --service shopify-ai-task-service-688qg4rd \
+#             --force-new-deployment
+
+
+name: Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: shopify-ai-backend
+  ECS_CLUSTER: shopify-ai-cluster
+  ECS_SERVICE: shopify-ai-task-service-688qg4rd
+  CONTAINER_NAME: api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Force new ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --force-new-deployment
